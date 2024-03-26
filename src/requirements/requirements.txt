@@ -1,0 +1,4 @@
+waveglow_256channels_ljs_v1.pt
+waveflow_functions(for generating the mel-spectrograms)
+waveglow model for synthesizing (pt file)
+ustool and tal tool for reading, preprations                    
