@@ -1,4 +1,9 @@
-waveglow_256channels_ljs_v1.pt
+waveglow_256channels_ljs_v1.pt:
+can be download from
+https://drive.google.com/open?id=1rpK8CzAAirq9sWZhe9nlfvxMF1dRgFbF
+also see:
+https://github.com/NVIDIA/tacotron2/tree/185cd24e046cc1304b4f8e564734d2498c6e2e6f?tab=readme-ov-file
+
 waveflow_functions(for generating the mel-spectrograms)
 waveglow model for synthesizing (pt file)
 ustool and tal tool for reading, preprations                    
