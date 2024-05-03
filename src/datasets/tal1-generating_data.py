@@ -35,7 +35,7 @@ def resize(data, target_frames):
     return resized
 
 
-def makingDS(inputpath, outputpath, orgDSPath):
+def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, waveglow_path: str):
     inputpath = open(inputpath, 'r')
     dataset = 'test'
     c = 0
@@ -139,12 +139,39 @@ def makingDS(inputpath, outputpath, orgDSPath):
     with hp.File(outputpath + dataset + '/' + 'Testlabel30.h5', 'w') as h5:
         h5.create_dataset('Yvalues', data=y_lbl)
 
+    if synthesize:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(device)
+        waveglow_name = 'WaveGlow-EN'
+        print('loading WaveGlow model...')
+        waveglow = torch.load(waveglow_path)['model']
+        waveglow.cuda()
+
+        interpolate_ratio = hop_length_UTI / hop_length_WaveGlow
+        melspec_predicted = skimage.transform.resize(mel_data, \
+                                                     (int(mel_data.shape[0] * interpolate_ratio),
+                                                      mel_data.shape[1]), preserve_range=True)
+
+        mel_data_for_synth = np.rot90(np.fliplr(melspec_predicted), axes=(0, 1))
+        mel_data_for_synth = torch.from_numpy(mel_data_for_synth.copy()).float().to(device)
+        #reverse
+
+        with torch.no_grad():
+            audio = waveglow.infer(mel_data_for_synth.view([1, 80, -1]).cuda(), sigma=0.666)
+            audio = audio[0].data.cpu().numpy()
+            # mel = np.transpose(mel_data)
+            # audio = librosa.feature.inverse.mel_to_audio(mel, sr=22050, n_fft=1024, hop_length=270)
+            sf.write(outputpath + dataset + '/synchOrgwav/' + prefix + '_melOrg.wav', audio,
+                 22050, subtype='PCM_16')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Generating Datasets")
     parser.add_argument("-i", "--input_path", type=str, help="Path to input list file", required=True)
     parser.add_argument("-o", "--output_path", type=str, help="Path to the save output", required=True)
     parser.add_argument("-ds", "--dataset_path", type=str, help="Path to TAL dataset", required=True)
+    parser.add_argument("-sz", "--synthesize", type=bool, help="if True then synthesizing the utterance during preparing the dataset using mel data", required=False, default=False)
+    parser.add_argument("-wg", "--waveglow_path", type=str, help="waveglow vocoder to synthesize speech from mel", required=False, default='/waveglow_256channels_ljs_v1.pt')
     args = parser.parse_args()
     makingDS(args.input_path, args.output_path, args.dataset_path)
     print('done')
