@@ -1,3 +1,5 @@
+import pickle
+
 import pandas as pds
 from matplotlib import pyplot as plt
 import keras
@@ -106,6 +108,9 @@ val_output= y_scaler.transform(val_output)
 test_output= y_scaler.transform(test_output)
 #print(y_scaler.mean_)
 
+with open('./weights/reverse_transform/target_weights.pkl','wb') as f:
+    pickle.dump(y_scaler,f)
+
 #adding a dimention for 2d model
 shape = train_input.shape + (1,)
 train_input = train_input.reshape(shape)
@@ -142,7 +147,10 @@ model.summary()
 
 history=model.fit(train_input,train_output,batch_size=100,epochs=40,verbose=1,callbacks =[earlystopper, lrr],shuffle=False,validation_data=(val_input,val_output))
 #
-#
+#sve the model weight at best loss function
+model.save_weights('./weights/checkpoint/conv2d.hdf5')
+
+
 history_dict=history.history
 loss_values = history_dict['loss']
 val_loss_values=history_dict['val_loss']
@@ -152,8 +160,10 @@ val_loss_values=history_dict['val_loss']
 #plt.show()
 #
 y_predict_train=model.predict(train_input)
-y_predict_test=model.predict(test_input)
 y_predict_dev=model.predict(val_input)
+# save this  values
+y_predict_test=model.predict(test_input)
+
 
 print('r2 score on train set is :\t{:0.3f}'.format(r2_score(train_output,y_predict_train)))
 print('r2 score on dev data is:\t{:0.3f}'.format(r2_score(val_output,y_predict_dev)))
