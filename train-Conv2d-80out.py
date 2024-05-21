@@ -1,12 +1,13 @@
 import pickle
 
 import pandas as pds
+from keras.src.ops import sigmoid
 from matplotlib import pyplot as plt
 import keras
 from keras.models import Sequential
 from keras.layers import Dense,Flatten,InputLayer,Dropout,Conv2D,MaxPooling2D, BatchNormalization
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
-from keras.optimizers import adam,adadelta,SGD
+from keras.optimizers import Adam,Adadelta,SGD
 from keras import regularizers 
 from keras.constraints import unit_norm, max_norm 
 from sklearn import preprocessing
@@ -20,12 +21,11 @@ import h5py as hp
 import numpy as np
 #import cv2
 
-from keras.backend import sigmoid
 def swish(x, beta = 1):
     return (x * sigmoid(beta * x))
-from keras.utils.generic_utils import get_custom_objects
-from keras.layers import Activation
-get_custom_objects().update({'swish': Activation(swish)})
+# from keras.utils.generic_utils import get_custom_objects
+# from keras.layers import Activation
+# get_custom_objects().update({'swish': Activation(swish)})
 
 class NDStandardScaler(TransformerMixin):
     def __init__(self, **kwargs):
