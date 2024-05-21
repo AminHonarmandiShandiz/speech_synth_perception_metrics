@@ -1,15 +1,17 @@
 import soundfile as sf
-import ustool.ustools.voice_activity_detection as vad
-import WaveGlow_functions
-import ustool.TALTool.visualiser.tools.utils as utils
+import src.requirements.voice_activity_detection as vad
+import src.requirements.ustools.utils as utils
 import librosa
-import ustool.TALTool.visualiser.tools.io as myio
+import src.requirements.ustools.io as myio
 import skimage.transform
 import h5py as hp
 from scipy.io import wavfile
 import os
 import numpy as np
 import argparse
+import torch
+
+from src.requirements import WaveGlow_functions
 
 sts = 5
 window_size = sts * 4 + 1
@@ -35,25 +37,26 @@ def resize(data, target_frames):
     return resized
 
 
-def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, waveglow_path: str):
-    inputpath = open(inputpath, 'r')
+def makingDS(partition_path: str, outputpath: str, orgDSPath: str, synthesize: bool, waveglow_path: str):
+    partition_files = open(partition_path, 'r')
     dataset = 'test'
     c = 0
     t = 0
     frames = 164
     cut = 164
     count = 0
-    for f in inputpath:
+    for f in partition_files:
         day = f.split(' ')[0]
         fileofday = f.split(' ')[1]
         filename = fileofday.split('\n')[0]
         file = fileofday.split('.wav')[0]
         Full_input_path = orgDSPath + '/' + day + '/'
         prefix = file.split('_')[0]
-        prefix = int(prefix)
-        if prefix < 50:
+        # prefix = int(prefix)
+        # if prefix < 50:
+        #     continue
+        if not os.path.exists(os.path.join(Full_input_path, filename)) :
             continue
-
         wav, wav_sr = librosa.load(os.path.join(Full_input_path, filename), sr=48000)
         ult, params = myio.read_ultrasound_tuple(os.path.join(Full_input_path, file), shape='3d', cast=None,
                                                  truncate=None)
@@ -167,11 +170,11 @@ def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Generating Datasets")
-    parser.add_argument("-i", "--input_path", type=str, help="Path to input list file", required=True)
+    parser.add_argument("-i", "--partition_path", type=str, help="Path to input list file", required=True)
     parser.add_argument("-o", "--output_path", type=str, help="Path to the save output", required=True)
     parser.add_argument("-ds", "--dataset_path", type=str, help="Path to TAL dataset", required=True)
     parser.add_argument("-sz", "--synthesize", type=bool, help="if True then synthesizing the utterance during preparing the dataset using mel data", required=False, default=False)
     parser.add_argument("-wg", "--waveglow_path", type=str, help="waveglow vocoder to synthesize speech from mel", required=False, default='/waveglow_256channels_ljs_v1.pt')
     args = parser.parse_args()
-    makingDS(args.input_path, args.output_path, args.dataset_path)
+    makingDS(args.partition_path, args.output_path, args.dataset_path, args.synthesize, args.waveglow_path)
     print('done')
