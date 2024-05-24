@@ -46,6 +46,15 @@ def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, 
     frames = 164
     cut = 164
     count = 0
+
+    if synthesize:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(device)
+        waveglow_name = 'WaveGlow-EN'
+        print('loading WaveGlow model...')
+        waveglow = torch.load(waveglow_path)['model']
+        waveglow.cuda()
+
     for f in inputpath:
         day = f.split(' ')[0]
         fileofday = f.split(' ')[1]
@@ -132,6 +141,25 @@ def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, 
             y_dev = np.concatenate((y_dev, mel_data), axis=0)
             y_lbl = np.concatenate((y_lbl, label), axis=0)
 
+        if synthesize:
+
+            interpolate_ratio = hop_length_UTI / hop_length_WaveGlow
+            melspec_predicted = skimage.transform.resize(mel_data, \
+                                                         (int(mel_data.shape[0] * interpolate_ratio),
+                                                          mel_data.shape[1]), preserve_range=True)
+
+            mel_data_for_synth = np.rot90(np.fliplr(melspec_predicted), axes=(0, 1))
+            mel_data_for_synth = torch.from_numpy(mel_data_for_synth.copy()).float().to(device)
+            # reverse
+
+            with torch.no_grad():
+                audio = waveglow.infer(mel_data_for_synth.view([1, 80, -1]).cuda(), sigma=0.666)
+                audio = audio[0].data.cpu().numpy()
+                # mel = np.transpose(mel_data)
+                # audio = librosa.feature.inverse.mel_to_audio(mel, sr=22050, n_fft=1024, hop_length=270)
+                sf.write(outputpath + '/' + dataset + '/synchOrgwav/' + str(prefix) + '_melOrg.wav', audio,
+                         22050, subtype='PCM_16')
+
     with hp.File(outputpath + '/' + dataset + '/' + 'TestInputFile30.h5', 'w') as h5:
 
         h5.create_dataset('Xvalues', data=X_dev)
@@ -141,31 +169,6 @@ def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, 
     # labeling
     with hp.File(outputpath + '/' + dataset + '/' + 'Testlabel30.h5', 'w') as h5:
         h5.create_dataset('Yvalues', data=y_lbl)
-
-    if synthesize:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(device)
-        waveglow_name = 'WaveGlow-EN'
-        print('loading WaveGlow model...')
-        waveglow = torch.load(waveglow_path)['model']
-        waveglow.cuda()
-
-        interpolate_ratio = hop_length_UTI / hop_length_WaveGlow
-        melspec_predicted = skimage.transform.resize(mel_data, \
-                                                     (int(mel_data.shape[0] * interpolate_ratio),
-                                                      mel_data.shape[1]), preserve_range=True)
-
-        mel_data_for_synth = np.rot90(np.fliplr(melspec_predicted), axes=(0, 1))
-        mel_data_for_synth = torch.from_numpy(mel_data_for_synth.copy()).float().to(device)
-        #reverse
-
-        with torch.no_grad():
-            audio = waveglow.infer(mel_data_for_synth.view([1, 80, -1]).cuda(), sigma=0.666)
-            audio = audio[0].data.cpu().numpy()
-            # mel = np.transpose(mel_data)
-            # audio = librosa.feature.inverse.mel_to_audio(mel, sr=22050, n_fft=1024, hop_length=270)
-            sf.write(outputpath + '/' + dataset + '/synchOrgwav/' + str(prefix) + '_melOrg.wav', audio,
-                 22050, subtype='PCM_16')
 
 
 def check_ffmpeg():
