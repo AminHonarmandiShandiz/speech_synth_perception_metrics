@@ -1,4 +1,8 @@
+import subprocess
+
 import soundfile as sf
+import torch
+
 import ustool.ustools.voice_activity_detection as vad
 import WaveGlow_functions
 import ustool.TALTool.visualiser.tools.utils as utils
@@ -35,14 +39,22 @@ def resize(data, target_frames):
     return resized
 
 
-def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, waveglow_path: str):
+def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, waveglow_path: str, dataset: str):
     inputpath = open(inputpath, 'r')
-    dataset = 'test'
     c = 0
     t = 0
     frames = 164
     cut = 164
     count = 0
+
+    if synthesize:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(device)
+        waveglow_name = 'WaveGlow-EN'
+        print('loading WaveGlow model...')
+        waveglow = torch.load(waveglow_path)['model']
+        waveglow.cuda()
+
     for f in inputpath:
         day = f.split(' ')[0]
         fileofday = f.split(' ')[1]
@@ -129,40 +141,50 @@ def makingDS(inputpath: str, outputpath: str, orgDSPath: str, synthesize: bool, 
             y_dev = np.concatenate((y_dev, mel_data), axis=0)
             y_lbl = np.concatenate((y_lbl, label), axis=0)
 
-    with hp.File(outputpath + dataset + '/' + 'TestInputFile30.h5', 'w') as h5:
+        if synthesize:
+
+            interpolate_ratio = hop_length_UTI / hop_length_WaveGlow
+            melspec_predicted = skimage.transform.resize(mel_data, \
+                                                         (int(mel_data.shape[0] * interpolate_ratio),
+                                                          mel_data.shape[1]), preserve_range=True)
+
+            mel_data_for_synth = np.rot90(np.fliplr(melspec_predicted), axes=(0, 1))
+            mel_data_for_synth = torch.from_numpy(mel_data_for_synth.copy()).float().to(device)
+            # reverse
+
+            with torch.no_grad():
+                audio = waveglow.infer(mel_data_for_synth.view([1, 80, -1]).cuda(), sigma=0.666)
+                audio = audio[0].data.cpu().numpy()
+                # mel = np.transpose(mel_data)
+                # audio = librosa.feature.inverse.mel_to_audio(mel, sr=22050, n_fft=1024, hop_length=270)
+                sf.write(outputpath + '/' + dataset + '/synchOrgwav/' + str(prefix) + '_melOrg.wav', audio,
+                         22050, subtype='PCM_16')
+
+    with hp.File(outputpath + '/' + dataset + '/' + 'TestInputFile30.h5', 'w') as h5:
 
         h5.create_dataset('Xvalues', data=X_dev)
 
-    with hp.File(outputpath + dataset + '/' + 'TestTargetFile30.h5', 'w') as h5:
+    with hp.File(outputpath + '/' + dataset + '/' + 'TestTargetFile30.h5', 'w') as h5:
         h5.create_dataset('Yvalues', data=y_dev)
     # labeling
-    with hp.File(outputpath + dataset + '/' + 'Testlabel30.h5', 'w') as h5:
+    with hp.File(outputpath + '/' + dataset + '/' + 'Testlabel30.h5', 'w') as h5:
         h5.create_dataset('Yvalues', data=y_lbl)
 
-    if synthesize:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(device)
-        waveglow_name = 'WaveGlow-EN'
-        print('loading WaveGlow model...')
-        waveglow = torch.load(waveglow_path)['model']
-        waveglow.cuda()
 
-        interpolate_ratio = hop_length_UTI / hop_length_WaveGlow
-        melspec_predicted = skimage.transform.resize(mel_data, \
-                                                     (int(mel_data.shape[0] * interpolate_ratio),
-                                                      mel_data.shape[1]), preserve_range=True)
-
-        mel_data_for_synth = np.rot90(np.fliplr(melspec_predicted), axes=(0, 1))
-        mel_data_for_synth = torch.from_numpy(mel_data_for_synth.copy()).float().to(device)
-        #reverse
-
-        with torch.no_grad():
-            audio = waveglow.infer(mel_data_for_synth.view([1, 80, -1]).cuda(), sigma=0.666)
-            audio = audio[0].data.cpu().numpy()
-            # mel = np.transpose(mel_data)
-            # audio = librosa.feature.inverse.mel_to_audio(mel, sr=22050, n_fft=1024, hop_length=270)
-            sf.write(outputpath + dataset + '/synchOrgwav/' + prefix + '_melOrg.wav', audio,
-                 22050, subtype='PCM_16')
+def check_ffmpeg():
+    try:
+        # Run a simple ffmpeg command to check if it is installed
+        result = subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            print("ffmpeg is installed and ready to use.")
+            print(result.stdout.split('\n')[0])  # Print the first line of the version info
+        else:
+            print("ffmpeg is not installed or not functioning properly.")
+            print(result.stderr)
+    except FileNotFoundError:
+        print("ffmpeg is not installed.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 if __name__ == '__main__':
@@ -170,8 +192,12 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--input_path", type=str, help="Path to input list file", required=True)
     parser.add_argument("-o", "--output_path", type=str, help="Path to the save output", required=True)
     parser.add_argument("-ds", "--dataset_path", type=str, help="Path to TAL dataset", required=True)
+    parser.add_argument("-dst", "--dataset_type", type=str, help="type of the dataset (test, validation, train)", required=False, default='test')
     parser.add_argument("-sz", "--synthesize", type=bool, help="if True then synthesizing the utterance during preparing the dataset using mel data", required=False, default=False)
     parser.add_argument("-wg", "--waveglow_path", type=str, help="waveglow vocoder to synthesize speech from mel", required=False, default='/waveglow_256channels_ljs_v1.pt')
     args = parser.parse_args()
-    makingDS(args.input_path, args.output_path, args.dataset_path)
+    # check_ffmpeg()
+    makingDS(args.input_path, args.output_path, args.dataset_path, args.synthesize, args.waveglow_path, args.dataset_type)
     print('done')
+
+
